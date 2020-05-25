@@ -1,0 +1,268 @@
+---
+Author: "Christella Nissanthan"
+Date: "11:59 May 24, 2020"
+Output: pdf_document
+Title: "Modeling and Forecasting the Housing price in Queens, NY"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+
+* __Christella Nissanthan__
+* __Final Project_Ma 3904__
+* __11:59 May 24, 2020__
+
+#                Modeling and Forecasting the Housing price in Queens, NY
+
+```{r setup, include=FALSE}
+tinytex::install_tinytex()
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/Users/christellanissanthan/Desktop/Final_Project")
+getwd()
+```
+
+## Abstract
+
+In this paper, we will model and predict the sales price using three different methods, which are supervised techniques used in the case of the quantitative dependent variable. In fact, many exogenous factors impact the housing sale price, and every single method brings a different insight into the housing database.
+For this purpose, we will start by the most important step, namely, the wrangling and cleansing of the dataset. By next, and after feature selection, we will train our models and make a comparison in terms of prediction errors. 
+
+**Keywords: Modeling, forecasting, housing price, R, RMarkDown, Regression, Random Forest, Decision Tree.**
+
+## 1. Introduction
+
+Predictive modeling is widely used by researchers and scientists to solve a plethora of economic, social, and health problems. A large variety of techniques have been developed and implemented. The choice of the right predictive modeling method is a meticulous work that implies the comparison and benchmarking of many models.
+
+Theoretically, a predictive model is written as a linear or non-linear mathematical formula that aims to explain and predict a variable of interest, which is independent/endogenous. The inputs are called explanatory or exogeneous variables and help to better understand the variable of interest and ensure a great quality of fit.
+
+Selecting the right variable to include in a predictive model can be very difficult and especially decisive of the quality of the model. For structural predictive models, such as linear regression, it's possible to quantify the relationship between the dependent and independent variables, which allows the model's high interpretability and results.
+
+In this paper, we will use three predictive modeling techniques to predict the sale price of housings in Queens, NY. There is an important number of explicative variables that can be included in the analysis, characteristics of the house, financial indicators, and social aspects. 
+
+We will try to include all the relevant factors to minimize the prediction error and keep certain interpretability in the results. Among the used techniques, random forest that was proposed by Leo Breiman and Adèle Cutler, 2001. In its most classical formula, it performs parallel learning on multiple decision trees constructed randomly and trained on subsets of data differently. The ideal number of trees, which can go up to several hundred or more, is an important parameter: it is very variable and depends on the problem. 
+
+The linear regression is a structural model that links linearly the dependent variable and the explicative ones and aims to minimize the root squared mean error between the fitted and actual values. The regression allows interpreting the link between the variable in term of the elasticity.
+
+A regression tree is a classic method in machine learning. It aims to predict the value of a target variable from the value of several input variables. One of the input variables is selected at each internal node (or internal, node which is not terminal) of the tree according to a method that depends on the algorithm and which will be discussed later. Each edge to a child node corresponds to a set of values of an input variable so that the set of edges to the child nodes covers all the possible values of the input variable.
+
+
+## 2. Data
+
+In this section, we will introduce our database used to predict the housing sale price in Queens, NY.
+
+The dataset is found on GitHub, housing_data_2016_2017.csv, where the outcome (dependent variable) to be predicted is the column named sale_price. The data contains a plethora of exogenous quantitative and qualitative explicative variables that impact the sale price.
+
+The raw database contains 2230 observations and 55 variables; not all the variables would be selected for the analysis because some of the variables are just informative, and others contain a lot of missing values, and that be irrelevant to include in the modeling part.
+
+The database needs great wrangling and cleansing to avoid any computational problems and also any bias in model estimates. By next, we will tidy the data and fix the problems among variables and observations.
+
+We will move to the next section, where we will provide more details and descriptive statistics about the data. 
+
+
+## 3. Data exploration and cleansing
+
+The first step is to provide the descriptive and exploratory summary (Like median, mean, standard deviation, number of missing values.) of the continuous variables:
+
+```{r pastecs dplyr}
+setwd("/Users/christellanissanthan/Desktop/Final_Project")
+house_data<-read.csv("housing_data_2016_2017.csv", sep=",", dec=".", header=T, stringsAsFactors = F)
+library(pastecs)
+library(dplyr)
+summary(house_data %>% select_if(is.numeric))
+```
+
+As we can remark, many columns contain missing values with a high percent like MaxAssignmentS, AssignmentDurationInSeconds, AutoApprovalDelayInSeconds, WorkTimeInSeconds... These variables should not be included in the model identification or selection because it may bias the estimation.
+
+Now, we will present the character variable in our dataset, using the str() function:
+```{r}
+str(house_data %>% select_if(is.character))
+str(house_data)
+```
+
+The output shows 36 string variables. Many of these variables are actually numerical and need the be formatted to delete string characters on it. For example, the dependent variable "sale_price" is categorized as a character because it contains the $ symbol that must be deleted and formatted.
+
+The main library we will use for this purpose is dplyr, which provides a plethora of functions that helps filtering, formatting, and selecting features.
+
+The main features used to format the database:
+- Remove irrelevant strings form observations like $ symbol
+- Recategorize dummy and multinomial variables by correcting the factors
+- Add new variables as a combination of others
+- Change the type of variables
+
+For this purpose, we create a new database "house_data_cleaned" that contains all this featurizations.
+```{r}
+library(stringr)
+library(tidyverse)
+library(lubridate) 
+house_data_cleaned<-house_data%>% 
+#First, we must convert the sale_price and other variables to a numerical by removing the $ symbol
+mutate(sale_price = as.numeric(gsub("[^0-9A-Za-z///' ]","" , sale_price))) %>%
+mutate(total_taxes = as.numeric(gsub("[^0-9A-Za-z///' ]","" , total_taxes))) %>%
+mutate(maintenance_cost = as.numeric(gsub("[^0-9A-Za-z///' ]","" , maintenance_cost))) %>%
+mutate(Reward = as.numeric(gsub("[^0-9A-Za-z///' ]","" , Reward))) %>%
+mutate(zip_code = str_extract(full_address_or_zip_code, "[0-9]{5}")) %>%
+mutate(common_charges = as.numeric(gsub("[^0-9A-Za-z///' ]","" , common_charges))) %>%
+mutate(listing_price_to_nearest_1000 = as.numeric(gsub("[^0-9A-Za-z///' ]","" , listing_price_to_nearest_1000))) %>%
+#The items of some variables should be recategorised-->
+mutate(dogs_allowed = ifelse(substr(house_data$dogs_allowed, 1, 3) == "yes", 1, 0)) %>%
+mutate(cats_allowed = ifelse(substr(house_data$cats_allowed, 1, 3) == "yes", 1, 0)) %>%
+mutate(pets_allowed = ifelse( cats_allowed + dogs_allowed > 0, 1, 0)) %>%
+mutate(coop_condo = factor(tolower(coop_condo))) %>%
+mutate(fuel_type=ifelse(fuel_type==c("Other","other"), "other",fuel_type)) %>%
+mutate(fuel_type=ifelse(fuel_type==c("Other","other"), "other",fuel_type)) %>%
+mutate(kitchen_type=ifelse(kitchen_type==c("efficiemcy","efficiency","efficiency kitchen","efficiency ktchen"),"efficiency",ifelse(kitchen_type==c("eat in","Eat in","Eat In","eatin"),"eat in","other")))  %>%
+mutate(kitchen_type=as.factor(kitchen_type)) %>%
+mutate(kitchen_type=ifelse(kitchen_type=="0", "other",kitchen_type)) %>%
+mutate(dining_room_type=ifelse(dining_room_type=="none","other", dining_room_type)) %>%
+mutate(dining_room_type=ifelse(dining_room_type=="dining area","other",dining_room_type)) %>%
+#Change the type of some variables
+mutate(dining_room_type = as.factor(dining_room_type)) %>%
+mutate(zip_code = as.numeric(zip_code)) %>%
+mutate(garage_exists = as.character(garage_exists)) %>%
+mutate(garage_exists = as.numeric(garage_exists)) %>%
+mutate(parking_charges = as.numeric(parking_charges)) %>%
+mutate(date_of_sale=as.Date(date_of_sale, format="%m/%d/%Y")) %>%
+mutate(maintenance_cost_sq = maintenance_cost^2)%>%
+mutate(month_sale=month(date_of_sale), year_sale=year(date_of_sale))   %>%
+select(-c(HITId, HITTypeId, Title, Description, Keywords, Reward, CreationTime, MaxAssignments, RequesterAnnotation, AssignmentId, NumberOfSimilarHITs, LifetimeInSeconds , RejectionTime,RequesterFeedback, URL,url, Expiration, WorkerId, AcceptTime, SubmitTime,AutoApprovalTime, ApprovalTime,AssignmentDurationInSeconds, garage_exists,full_address_or_zip_code, Last30DaysApprovalRate, Last7DaysApprovalRate, date_of_sale, model_type,LifetimeApprovalRate, AutoApprovalDelayInSeconds, parking_charges,fuel_type, month_sale, year_sale))
+house_data_cleaned$listing_price_to_nearest_1000<-ifelse(house_data_cleaned$listing_price_to_nearest_1000==0, 385, house_data_cleaned$listing_price_to_nearest_1000)
+#Now, we will replace all the remaining NAs with 0
+house_data_cleaned[is.na(house_data_cleaned)]=0
+```
+
+
+## 4. Modeling
+
+### 4.1. Data splitting
+
+It's important to split the dataset into at least two sets, the training dataset and the test data test. The performance of the model is calculated in both sets. First, the model is trained using the training dataset and then it would be used in a test dataset to properly test the adequation of the model.
+```{r}
+train_index = sample(1 : nrow(house_data_cleaned), nrow(house_data_cleaned)*80/100)
+training_set = house_data_cleaned[train_index, ]
+testing_set = house_data_cleaned[-train_index, ]
+Both_sets = rbind(training_set, testing_set)
+```
+
+```{r}
+summary(training_set)
+summary(testing_set)
+```
+
+### 4.2. Linear regression
+
+We will start our modeling par with the linear regression, the most used modeling technique of continious variables.
+```{r}
+linear_regression<-lm(sale_price~., training_set)
+summary(linear_regression)
+```
+
+```{r}
+dependent_linear<- attributes(alias(linear_regression)$Complete)$dimnames[[1]]
+```
+
+```{r car}
+library(car)
+Multicollinearity<-vif(linear_regression)
+Multicollinearity
+```
+
+We should delete from the training and test datasets:
+
+```{r}
+training_set<-training_set %>% select(-cats_allowed)
+testing_set<-testing_set %>% select(-cats_allowed)
+training_set$cats_allowed
+```
+
+```{r}
+linear_regression_2<-lm(sale_price~., training_set)
+summary(linear_regression_2)
+plot(linear_regression_2)
+```
+
+```{r}
+test_predict = predict(linear_regression_2, testing_set %>% select(-sale_price))
+error = test_predict - testing_set$sale_price
+```
+
+```{r}
+mae <- function(error)
+{
+    mean(abs(error))
+}
+```
+
+```{r}
+rmse <- function(error)
+{
+    sqrt(mean(error^2))
+}
+```
+
+```{r}
+mae(error[!is.na(error)])
+rmse(error[!is.na(error)])
+```
+
+### 4.3. Regression tree
+
+```{r}
+library(rsample)#data spliting
+library(rpart) #performing reg tree
+library(rpart.plot) #ploting reg tree
+library(ipred) #bagging
+library(caret) #bagging
+regression_tree = rpart(
+formula = training_set$sale_price ~ .,
+data = training_set %>% select(-c(sale_price, listing_price_to_nearest_1000)),
+method = "anova",
+control = list(minsplit = 10, maxdepth = 6, xval = 5)
+)
+rpart.plot(regression_tree, roundint = FALSE)
+summary(regression_tree)
+
+```
+
+```{r}
+test_predict = predict(regression_tree, testing_set %>% select(-sale_price))
+error = test_predict - testing_set$sale_price
+```
+
+```{r}
+mae(error[!is.na(error)])
+rmse(error[!is.na(error)])
+```
+
+### 4.4. Random Forest
+
+```{r}
+library(randomForest)
+training_set1<- na.exclude(training_set %>% filter(sale_price>0, ! is.na(sale_price)))
+str(training_set1)
+training_set1$AssignmentStatus=as.factor(training_set1$AssignmentStatus)
+random_forest = randomForest(training_set1$sale_price ~ .,
+training_set1 %>% select(-c(sale_price, listing_price_to_nearest_1000)))
+summary(random_forest)
+random_forest
+```
+
+```{r}
+sqrt(which.min(random_forest$mse))
+```
+
+## 5. Performance results
+
+In this section, we will compare the performance of the found model using the RMSE and MAE metrics. The models that show the lowest value of these metrics are the best ones to fit the housing sale price.
+
+The Random Forest a robust machine learing algorithm provides the best performance looking at the values of the RMSE and MAE that are highly inferior to the ones found in other models. 
+
+It's trivial, because while the linear regression and regression tree estimates once the model, the random forest can compute lot of combinations to find the optimal model that better suit the dependent variable and reduce more the error of prediction.
+
+
+## 6. Discussion
+
+The used raw database has needed lot of work to clean it and format it. That would have been more relevant for database maker to better collect the data and include more control techniques to avoid all the incoherence found in the data cleansing part.
+
+## Acknowledgments
+
+I would like to thank my brother & friend that those who helped me develop my expertise in R programming language, Machine learing and predictive modeling.
